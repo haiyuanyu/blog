@@ -567,9 +567,18 @@ async function init() {
     hideLoading();
     return;
   }
-  await loadAllData();
-  realtimeSubscribe();
-  hideLoading();
+  try {
+    await Promise.race([
+      loadAllData(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时（10秒）')), 10000))
+    ]);
+    realtimeSubscribe();
+  } catch (err) {
+    console.error('初始化失败:', err);
+    renderErrorState(err.message || '未知错误');
+  } finally {
+    hideLoading();
+  }
 }
 
 // ── 加载数据 ──
@@ -579,16 +588,33 @@ async function loadAllData() {
     supabase.from('thoughts').select('*').order('created_at', { ascending: false })
   ]);
 
+  if (articlesRes.error) throw new Error('加载文章失败: ' + articlesRes.error.message);
+  if (thoughtsRes.error) throw new Error('加载感悟失败: ' + thoughtsRes.error.message);
+
   db.articles = articlesRes.data || [];
   db.thoughts = thoughtsRes.data || [];
-  db.articles.forEach(a => { if (a.date && !a.created_at) a.created_at = a.date; });
-  db.thoughts.forEach(t => { if (t.date && !t.created_at) t.created_at = t.date; });
-
-  if (articlesRes.error) console.error('加载文章失败:', articlesRes.error);
-  if (thoughtsRes.error) console.error('加载感悟失败:', thoughtsRes.error);
 
   updateSyncDot();
   renderHome();
+}
+
+// ── 错误状态 ──
+function renderErrorState(msg) {
+  const errHtml = `
+    <div style="text-align:center;padding:60px 20px;max-width:500px;margin:0 auto">
+      <div style="font-size:40px;margin-bottom:16px">⚠️</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text-main)">连接云端失败</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.7">${escHtml(msg)}</div>
+      <div style="background:#FDF3EC;border-radius:12px;padding:16px;text-align:left;font-size:13px;color:#854F0B;line-height:1.8">
+        <b>常见原因及解决方法：</b><br>
+        1. Supabase 数据表未建立 → 去 SQL Editor 运行建表语句<br>
+        2. RLS 策略未设置 → 运行部署指南里的 CREATE POLICY<br>
+        3. ANON KEY 填错 → 在 Supabase → Settings → API 重新复制<br>
+        4. 网络问题 → 刷新重试
+      </div>
+      <button onclick="location.reload()" style="margin-top:20px;padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer">🔄 重新加载</button>
+    </div>`;
+  document.getElementById('page-home').innerHTML = errHtml;
 }
 
 // ── 实时订阅 ──
