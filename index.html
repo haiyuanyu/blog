@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生活随笔 · 我的小世界</title>
+  <style>
+    :root {
+      --primary: #6B7FD4;
+      --primary-light: #EEF0FB;
+      --accent: #E8A87C;
+      --accent-light: #FDF3EC;
+      --text-main: #2C2C2A;
+      --text-muted: #888780;
+      --text-hint: #B4B2A9;
+      --bg: #FAFAF8;
+      --bg-card: #FFFFFF;
+      --border: rgba(44,44,42,0.12);
+      --border-hover: rgba(44,44,42,0.22);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 2px 16px rgba(0,0,0,0.06);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+
+    /* 加载状态 */
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 16px;
+      transition: opacity 0.4s;
+    }
+    .loading-screen.hidden { opacity: 0; pointer-events: none; }
+    .loading-dots { display: flex; gap: 6px; }
+    .loading-dots span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--primary);
+      animation: dot 1.2s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .loading-text { font-size: 14px; color: var(--text-muted); }
+
+    /* 顶部导航 */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(250,250,248,0.92);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav {
+      max-width: 900px; margin: 0 auto; padding: 0 24px;
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      font-size: 18px; font-weight: 600; color: var(--primary);
+      letter-spacing: 0.02em; cursor: pointer; text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 4px; list-style: none; }
+    .nav-links a {
+      padding: 6px 14px; border-radius: 20px; font-size: 14px;
+      color: var(--text-muted); text-decoration: none; transition: all 0.2s; cursor: pointer;
+    }
+    .nav-links a:hover, .nav-links a.active {
+      background: var(--primary-light); color: var(--primary); font-weight: 500;
+    }
+
+    main { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* 首页 Hero */
+    .hero { text-align: center; padding: 60px 0 48px; }
+    .avatar {
+      width: 88px; height: 88px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; margin: 0 auto 20px;
+      box-shadow: 0 4px 20px rgba(107,127,212,0.3);
+    }
+    .hero h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+    .hero .tagline { font-size: 16px; color: var(--text-muted); margin-bottom: 32px; }
+    .hero-stats { display: flex; justify-content: center; gap: 40px; }
+    .stat-item { text-align: center; }
+    .stat-num { font-size: 24px; font-weight: 600; color: var(--primary); }
+    .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+    /* 分区标题 */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px; margin-top: 40px;
+    }
+    .section-title {
+      font-size: 18px; font-weight: 600; color: var(--text-main);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::before {
+      content: ''; display: inline-block; width: 4px; height: 18px;
+      background: var(--primary); border-radius: 2px;
+    }
+    .see-all {
+      font-size: 13px; color: var(--primary); text-decoration: none;
+      cursor: pointer; padding: 4px 10px; border-radius: 16px; transition: background 0.2s;
+    }
+    .see-all:hover { background: var(--primary-light); }
+
+    /* 文章卡片 */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--bg-card); border-radius: var(--radius);
+      border: 1px solid var(--border); padding: 20px;
+      cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden;
+    }
+    .card:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: var(--shadow); }
+    .card-tag {
+      display: inline-block; font-size: 11px; padding: 2px 8px;
+      border-radius: 10px; margin-bottom: 10px; font-weight: 500;
+    }
+    .tag-life { background: #E1F5EE; color: #0F6E56; }
+    .tag-thought { background: var(--primary-light); color: var(--primary); }
+    .tag-travel { background: var(--accent-light); color: #854F0B; }
+    .tag-food { background: #FBEAF0; color: #993556; }
+    .tag-book { background: #EAF3DE; color: #3B6D11; }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; line-height: 1.4; }
+    .card-excerpt {
+      font-size: 13px; color: var(--text-muted); line-height: 1.6;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .card-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+    }
+    .card-date { font-size: 12px; color: var(--text-hint); }
+    .card-like {
+      font-size: 12px; color: var(--text-hint);
+      display: flex; align-items: center; gap: 4px; cursor: pointer;
+      padding: 3px 8px; border-radius: 10px; border: 1px solid var(--border);
+      background: transparent; transition: all 0.2s;
+    }
+    .card-like:hover, .card-like.liked { background: #FCEBEB; border-color: #F09595; color: #A32D2D; }
+
+    /* 感悟列表 */
+    .thought-list { display: flex; flex-direction: column; gap: 16px; }
+    .thought-card {
+      background: var(--bg-card); border-radius: var(--radius);
+      border: 1px solid var(--border); padding: 24px;
+      cursor: pointer; transition: all 0.2s; border-left: 4px solid var(--primary);
+    }
+    .thought-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+    .thought-card blockquote { font-size: 16px; font-style: italic; margin-bottom: 12px; line-height: 1.7; }
+    .thought-card .meta { font-size: 12px; color: var(--text-hint); display: flex; align-items: center; gap: 12px; }
+
+    /* 时间轴 */
+    .timeline { position: relative; padding-left: 28px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px;
+      width: 2px; background: var(--border); border-radius: 1px;
+    }
+    .timeline-item { position: relative; margin-bottom: 28px; }
+    .timeline-dot {
+      position: absolute; left: -25px; top: 6px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--primary); border: 2px solid var(--bg); box-shadow: 0 0 0 2px var(--primary);
+    }
+    .timeline-date { font-size: 12px; color: var(--text-hint); margin-bottom: 6px; }
+    .timeline-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 16px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .timeline-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow); }
+    .timeline-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .timeline-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+    /* 写新文章浮动按钮 */
+    .fab {
+      position: fixed; bottom: 32px; right: 32px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--primary); color: #fff; font-size: 24px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 4px 16px rgba(107,127,212,0.4);
+      transition: all 0.2s; border: none; z-index: 200;
+    }
+    .fab:hover { background: #5a6cc4; transform: scale(1.08); }
+    .fab.unlocked { background: #E24B4A; box-shadow: 0 4px 16px rgba(226,75,74,0.4); }
+
+    /* 写文章 Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 300;
+      backdrop-filter: blur(4px); align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--bg-card); border-radius: var(--radius);
+      padding: 32px; width: min(600px, 92vw); max-height: 88vh;
+      overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;
+    }
+    .modal-title { font-size: 18px; font-weight: 600; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 50%; border: none;
+      background: var(--bg); color: var(--text-muted); font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .modal-close:hover { background: var(--border); }
+    .form-group { margin-bottom: 18px; }
+    .form-label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+    .form-input, .form-textarea, .form-select {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); font-size: 14px; color: var(--text-main);
+      background: var(--bg); font-family: inherit; transition: border-color 0.2s; outline: none;
+    }
+    .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--primary); }
+    .form-textarea { min-height: 150px; resize: vertical; line-height: 1.7; }
+    .form-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tag-btn {
+      padding: 5px 12px; border-radius: 16px; border: 1px solid var(--border);
+      background: var(--bg); font-size: 13px; color: var(--text-muted);
+      cursor: pointer; transition: all 0.2s; font-family: inherit;
+    }
+    .tag-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 500; }
+    .btn-primary {
+      width: 100%; padding: 12px; background: var(--primary); color: #fff;
+      border: none; border-radius: var(--radius-sm); font-size: 15px;
+      font-weight: 500; cursor: pointer; font-family: inherit;
+      transition: background 0.2s; margin-top: 8px;
+    }
+    .btn-primary:hover { background: #5a6cc4; }
+    .btn-ghost {
+      width: 100%; padding: 12px; background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 15px; cursor: pointer; font-family: inherit;
+      transition: all 0.2s; margin-top: 8px;
+    }
+    .btn-ghost:hover { background: var(--bg); border-color: var(--border-hover); }
+
+    /* 文章详情 */
+    .article-detail { display: none; max-width: 680px; margin: 0 auto; }
+    .article-detail.open { display: block; }
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 14px; color: var(--text-muted); cursor: pointer;
+      margin-bottom: 28px; padding: 6px 12px 6px 8px; border-radius: 20px; transition: background 0.2s;
+    }
+    .back-btn:hover { background: var(--border); }
+    .article-tag { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 12px; margin-bottom: 12px; }
+    .article-title { font-size: 26px; font-weight: 700; line-height: 1.4; margin-bottom: 12px; }
+    .article-meta { font-size: 13px; color: var(--text-hint); margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+    .article-body { font-size: 16px; line-height: 1.9; }
+    .article-body p { margin-bottom: 18px; }
+
+    /* 关于我 */
+    .about-hero {
+      background: var(--bg-card); border-radius: var(--radius);
+      border: 1px solid var(--border); padding: 36px;
+      display: flex; gap: 28px; align-items: flex-start; margin-bottom: 24px;
+    }
+    .about-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      display: flex; align-items: center; justify-content: center; font-size: 32px; flex-shrink: 0;
+    }
+    .about-info h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+    .about-info p { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
+    .interest-tag {
+      padding: 6px 14px; border-radius: 20px; font-size: 13px;
+      border: 1px solid var(--border); color: var(--text-muted);
+    }
+
+    /* 搜索 */
+    .search-wrap { position: relative; margin-bottom: 24px; }
+    .search-input {
+      width: 100%; padding: 12px 16px 12px 42px; border: 1px solid var(--border);
+      border-radius: 24px; font-size: 14px; background: var(--bg-card);
+      color: var(--text-main); font-family: inherit; outline: none; transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--primary); }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-hint); }
+
+    /* 空状态 */
+    .empty { text-align: center; padding: 60px 20px; color: var(--text-hint); font-size: 14px; }
+
+    /* 吐司提示 */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--text-main); color: #fff;
+      padding: 10px 22px; border-radius: 24px; font-size: 14px;
+      z-index: 400; transition: transform 0.3s ease; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* 解锁提示 */
+    .unlock-bar {
+      background: linear-gradient(90deg, var(--primary), #8B9FE4);
+      color: #fff; text-align: center; padding: 10px 16px;
+      font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .unlock-bar .lock-btn {
+      background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; padding: 3px 12px; border-radius: 12px; font-size: 12px;
+      cursor: pointer; font-family: inherit; transition: background 0.2s;
+    }
+    .unlock-bar .lock-btn:hover { background: rgba(255,255,255,0.4); }
+
+    /* 实时同步指示 */
+    .sync-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #1D9E75; display: inline-block; margin-right: 4px;
+    }
+    .sync-dot.syncing { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* 响应式 */
+    @media (max-width: 600px) {
+      .card-grid { grid-template-columns: 1fr; }
+      .about-hero { flex-direction: column; }
+      .hero-stats { gap: 24px; }
+      nav { padding: 0 16px; }
+      main { padding: 24px 16px 80px; }
+      .modal { padding: 24px; }
+      .fab { bottom: 24px; right: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 加载屏幕 -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-dots"><span></span><span></span><span></span></div>
+  <div class="loading-text">正在连接云端…</div>
+</div>
+
+<!-- 解锁提示条（未解锁时显示） -->
+<div class="unlock-bar" id="unlockBar" style="display:none">
+  <span class="sync-dot"></span>
+  所有访客可见 · 你需要解锁才能写作
+  <button class="lock-btn" onclick="openUnlockModal()">🔑 解锁写作</button>
+</div>
+
+<!-- 顶部导航 -->
+<header>
+  <nav>
+    <a class="logo" onclick="goPage('home')">🌿 生活随笔</a>
+    <ul class="nav-links">
+      <li><a onclick="goPage('home')" id="nav-home" class="active">首页</a></li>
+      <li><a onclick="goPage('life')" id="nav-life">生活</a></li>
+      <li><a onclick="goPage('thoughts')" id="nav-thoughts">感悟</a></li>
+      <li><a onclick="goPage('about')" id="nav-about">关于我</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main>
+  <!-- 首页 -->
+  <div class="page active" id="page-home">
+    <div class="hero">
+      <div class="avatar">🌿</div>
+      <h1>我的小世界</h1>
+      <p class="tagline">记录生活，沉淀思想，与时光为友</p>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <div class="stat-num" id="stat-articles">—</div>
+          <div class="stat-label">篇文章</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num" id="stat-days">—</div>
+          <div class="stat-label">天记录</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num" id="stat-thoughts">—</div>
+          <div class="stat-label">条感悟</div>
+        </div>
+      </div>
+    </div>
+    <div class="section-header">
+      <div class="section-title">最新记录 <span class="sync-dot" id="homeSyncDot"></span></div>
+      <a class="see-all" onclick="goPage('life')">查看全部 →</a>
+    </div>
+    <div class="card-grid" id="home-articles"></div>
+    <div class="section-header">
+      <div class="section-title">近期感悟</div>
+      <a class="see-all" onclick="goPage('thoughts')">查看全部 →</a>
+    </div>
+    <div class="thought-list" id="home-thoughts"></div>
+  </div>
+
+  <!-- 生活记录页 -->
+  <div class="page" id="page-life">
+    <div id="life-list-view">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" placeholder="搜索文章…" id="search-life" oninput="filterArticles()">
+      </div>
+      <div class="card-grid" id="life-articles"></div>
+    </div>
+    <div class="article-detail" id="life-detail">
+      <div class="back-btn" onclick="closeDetail()">← 返回列表</div>
+      <div id="detail-content"></div>
+    </div>
+  </div>
+
+  <!-- 感悟页 -->
+  <div class="page" id="page-thoughts">
+    <div class="section-header" style="margin-top:0">
+      <div class="section-title">个人感悟</div>
+    </div>
+    <div class="thought-list" id="all-thoughts"></div>
+  </div>
+
+  <!-- 关于我页 -->
+  <div class="page" id="page-about">
+    <div class="about-hero">
+      <div class="about-avatar">🌿</div>
+      <div class="about-info">
+        <h2>嗨，我是这里的主人 👋</h2>
+        <p>这是一个私人的角落，用来记录生活中那些值得被记住的片段——<br>
+        一个清晨的阳光、一场淋雨、一本书的共鸣、一句突然想通的道理。<br><br>
+        不追求完美，只求真实。</p>
+      </div>
+    </div>
+    <div class="section-header" style="margin-top:0">
+      <div class="section-title">我的兴趣</div>
+    </div>
+    <div class="tag-cloud" style="margin-bottom:32px">
+      <span class="interest-tag">📚 阅读</span>
+      <span class="interest-tag">✍️ 写作</span>
+      <span class="interest-tag">🎵 音乐</span>
+      <span class="interest-tag">🌿 自然</span>
+      <span class="interest-tag">🍳 烹饪</span>
+      <span class="interest-tag">🚶 散步</span>
+      <span class="interest-tag">🎬 电影</span>
+      <span class="interest-tag">☕ 咖啡</span>
+    </div>
+    <div class="section-header" style="margin-top:0">
+      <div class="section-title">时间轴</div>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</main>
+
+<!-- 写文章浮动按钮 -->
+<button class="fab" id="fab-btn" onclick="handleFabClick()" title="写新记录">✏️</button>
+
+<!-- 写作 Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">✍️ 写新记录</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">类型</label>
+      <div class="form-tags" id="type-selector">
+        <button class="tag-btn active" data-type="life" onclick="selectType(this)">📔 生活记录</button>
+        <button class="tag-btn" data-type="thought" onclick="selectType(this)">💡 个人感悟</button>
+      </div>
+    </div>
+    <div id="article-fields">
+      <div class="form-group">
+        <label class="form-label">标题</label>
+        <input class="form-input" id="input-title" placeholder="给这篇记录起个名字…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">标签</label>
+        <div class="form-tags" id="tag-selector">
+          <button class="tag-btn active" data-tag="life" onclick="selectTag(this)">🌱 生活</button>
+          <button class="tag-btn" data-tag="travel" onclick="selectTag(this)">✈️ 旅行</button>
+          <button class="tag-btn" data-tag="food" onclick="selectTag(this)">🍜 美食</button>
+          <button class="tag-btn" data-tag="book" onclick="selectTag(this)">📚 读书</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">内容</label>
+      <textarea class="form-textarea" id="input-content" placeholder="写下今天的故事、感受或想法…"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">心情</label>
+      <div class="form-tags" id="mood-selector">
+        <button class="tag-btn active" data-mood="😊" onclick="selectMood(this)">😊 开心</button>
+        <button class="tag-btn" data-mood="😌" onclick="selectMood(this)">😌 平静</button>
+        <button class="tag-btn" data-mood="🤔" onclick="selectMood(this)">🤔 思考</button>
+        <button class="tag-btn" data-mood="😢" onclick="selectMood(this)">😢 低落</button>
+        <button class="tag-btn" data-mood="🥰" onclick="selectMood(this)">🥰 感动</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="saveEntry()">保存记录 ✨</button>
+  </div>
+</div>
+
+<!-- 解锁 Modal -->
+<div class="modal-overlay" id="unlockModal">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title">🔑 解锁写作权限</span>
+      <button class="modal-close" onclick="closeUnlockModal()">✕</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.7">
+      输入你的写作密码（设置在 Supabase 控制台的环境变量中），解锁后即可发布内容。
+    </div>
+    <div class="form-group">
+      <label class="form-label">写作密码</label>
+      <input class="form-input" type="password" id="input-password" placeholder="请输入密码…">
+    </div>
+    <button class="btn-primary" onclick="tryUnlock()">解锁 ✨</button>
+    <button class="btn-ghost" onclick="closeUnlockModal()">取消</button>
+  </div>
+</div>
+
+<div id="modal-bg-close" onclick="closeModal()" style="display:none;position:fixed;inset:0;z-index:299"></div>
+<div class="toast" id="toast"></div>
+
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════
+// 配置区 — 请填入你的 Supabase 信息
+// ═══════════════════════════════════════
+const SUPABASE_URL = 'https://zsxqwzykbktnbkqqszhi.supabase.co';        // ← 替换
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeHF3enlrYmt0bmJrcXFzemhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNjM2MDksImV4cCI6MjA5NDgzOTYwOX0.k16lbF_30mQiTlG5Hja8KKEFh6aHSq8iUkQ88BIb1Ss'; // ← 替换
+const WRITER_PASSWORD = 'sesa181531';                   // ← 替换为你的写作密码
+// ═══════════════════════════════════════
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── 状态 ──
+let isUnlocked = sessionStorage.getItem('journal_unlocked') === '1';
+let isConfigured = SUPABASE_URL !== 'https://你的项目.supabase.co';
+let currentType = 'life';
+let currentTag = 'life';
+let currentMood = '😊';
+let realtimeChannel = null;
+
+// ── 启动 ──
+async function init() {
+  if (!isConfigured) {
+    showToast('⚠️ 请先在 HTML 中配置 Supabase URL 和 Key');
+    renderEmptyState();
+    hideLoading();
+    return;
+  }
+  await loadAllData();
+  realtimeSubscribe();
+  hideLoading();
+}
+
+// ── 加载数据 ──
+async function loadAllData() {
+  const [articlesRes, thoughtsRes] = await Promise.all([
+    supabase.from('articles').select('*').order('created_at', { ascending: false }),
+    supabase.from('thoughts').select('*').order('created_at', { ascending: false })
+  ]);
+
+  db.articles = articlesRes.data || [];
+  db.thoughts = thoughtsRes.data || [];
+  db.articles.forEach(a => { if (a.date && !a.created_at) a.created_at = a.date; });
+  db.thoughts.forEach(t => { if (t.date && !t.created_at) t.created_at = t.date; });
+
+  if (articlesRes.error) console.error('加载文章失败:', articlesRes.error);
+  if (thoughtsRes.error) console.error('加载感悟失败:', thoughtsRes.error);
+
+  updateSyncDot();
+  renderHome();
+}
+
+// ── 实时订阅 ──
+function realtimeSubscribe() {
+  if (!isConfigured) return;
+  realtimeChannel = supabase
+    .channel('journal-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'articles' }, () => { loadAllData(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'thoughts' }, () => { loadAllData(); })
+    .subscribe();
+}
+
+function updateSyncDot() {
+  document.querySelectorAll('.sync-dot').forEach(d => d.classList.add('syncing'));
+  setTimeout(() => document.querySelectorAll('.sync-dot').forEach(d => d.classList.remove('syncing')), 1000);
+}
+
+// ── 本地数据结构（兼容旧代码） ──
+let db = { articles: [], thoughts: [], timeline: [
+  { date: '2026年5月', text: '开始写这个博客，给自己一个记录生活的地方。' },
+  { date: '2025年秋', text: '第一次独自旅行，学会了和陌生的自己相处。' },
+  { date: '2025年春', text: '读完了人生中第一百本书，开始认真做读书笔记。' }
+]};
+
+function renderEmptyState() {
+  document.getElementById('home-articles').innerHTML = '<div class="empty">📝 还没有记录<br><br>请先在 HTML 中配置 Supabase<br>（参考说明文档）</div>';
+  document.getElementById('home-thoughts').innerHTML = '<div class="empty">💡 还没有感悟</div>';
+  document.getElementById('all-thoughts').innerHTML = '<div class="empty">💡 还没有感悟</div>';
+  document.getElementById('life-articles').innerHTML = '<div class="empty">📝 还没有记录</div>';
+}
+
+// ── 导航 ──
+function goPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('nav-' + page).classList.add('active');
+  document.getElementById('fab-btn').style.display = page === 'about' ? 'none' : 'flex';
+  if (page === 'life') {
+    document.getElementById('life-detail').classList.remove('open');
+    document.getElementById('life-list-view').style.display = '';
+  }
+  if (page === 'home') renderHome();
+  if (page === 'life') renderLifeList();
+  if (page === 'thoughts') renderAllThoughts();
+  if (page === 'about') renderAbout();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── 渲染首页 ──
+function renderHome() {
+  document.getElementById('stat-articles').textContent = db.articles.length;
+  const days = new Set(db.articles.map(a => a.date || '')).size;
+  document.getElementById('stat-days').textContent = Math.max(days, 1);
+  document.getElementById('stat-thoughts').textContent = db.thoughts.length;
+  const recent = db.articles.slice(0, 3);
+  renderArticleGrid(document.getElementById('home-articles'), recent);
+  const recentT = db.thoughts.slice(0, 2);
+  renderThoughtList(document.getElementById('home-thoughts'), recentT);
+}
+
+function renderArticleGrid(container, articles) {
+  if (!articles.length) {
+    container.innerHTML = '<div class="empty">还没有记录 ✨</div>';
+    return;
+  }
+  container.innerHTML = articles.map(a => `
+    <div class="card" onclick="openArticle('${a.id}')">
+      <span class="card-tag tag-${a.tag || 'life'}">${tagLabel(a.tag || 'life')}</span>
+      <div class="card-title">${escHtml(a.title || '无题')}</div>
+      <div class="card-excerpt">${escHtml(a.content || '')}</div>
+      <div class="card-meta">
+        <span class="card-date">${a.mood || '😊'} ${a.date || ''}</span>
+        <button class="card-like ${a.liked ? 'liked' : ''}" onclick="toggleLike(event,'${a.id}')">
+          ♥ ${a.likes || 0}
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderThoughtList(container, thoughts) {
+  if (!thoughts.length) {
+    container.innerHTML = '<div class="empty">还没有感悟 💡</div>';
+    return;
+  }
+  container.innerHTML = thoughts.map(t => `
+    <div class="thought-card">
+      <blockquote>"${escHtml(t.content || '')}"</blockquote>
+      <div class="meta"><span>${t.mood || '🤔'}</span><span>${t.date || ''}</span></div>
+    </div>
+  `).join('');
+}
+
+function renderLifeList() {
+  renderArticleGrid(document.getElementById('life-articles'), db.articles);
+}
+
+function filterArticles() {
+  const kw = document.getElementById('search-life').value.toLowerCase();
+  const filtered = db.articles.filter(a =>
+    (a.title || '').toLowerCase().includes(kw) || (a.content || '').toLowerCase().includes(kw)
+  );
+  renderArticleGrid(document.getElementById('life-articles'), filtered);
+}
+
+function openArticle(id) {
+  const a = db.articles.find(x => x.id === id);
+  if (!a) return;
+  goPage('life');
+  document.getElementById('life-list-view').style.display = 'none';
+  const detail = document.getElementById('life-detail');
+  detail.classList.add('open');
+  document.getElementById('detail-content').innerHTML = `
+    <span class="article-tag tag-${a.tag || 'life'}">${tagLabel(a.tag || 'life')}</span>
+    <h1 class="article-title">${escHtml(a.title || '无题')}</h1>
+    <div class="article-meta">${a.mood || '😊'} ${a.date || ''}</div>
+    <div class="article-body">${(a.content || '').split('\n').filter(l => l.trim()).map(l => `<p>${escHtml(l)}</p>`).join('')}</div>
+  `;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeDetail() {
+  document.getElementById('life-detail').classList.remove('open');
+  document.getElementById('life-list-view').style.display = '';
+}
+
+function renderAllThoughts() {
+  renderThoughtList(document.getElementById('all-thoughts'), db.thoughts);
+}
+
+function renderAbout() {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = db.timeline.map(item => `
+    <div class="timeline-item">
+      <div class="timeline-dot"></div>
+      <div class="timeline-date">${escHtml(item.date)}</div>
+      <div class="timeline-card"><p>${escHtml(item.text)}</p></div>
+    </div>
+  `).join('');
+}
+
+// ── 点赞 ──
+async function toggleLike(e, id) {
+  e.stopPropagation();
+  const a = db.articles.find(x => x.id === id);
+  if (!a) return;
+  const newLikes = (a.likes || 0) + (a.liked ? -1 : 1);
+  const { error } = await supabase.from('articles').update({ likes: newLikes, liked: !a.liked }).eq('id', id);
+  if (!error) {
+    a.likes = newLikes; a.liked = !a.liked;
+    e.currentTarget.classList.toggle('liked', a.liked);
+    e.currentTarget.innerHTML = `♥ ${a.likes}`;
+  } else {
+    showToast('点赞失败，请检查网络');
+  }
+}
+
+// ── 解锁 ──
+function handleFabClick() {
+  if (!isConfigured) { showToast('请先配置 Supabase'); return; }
+  if (isUnlocked) { openModal(); }
+  else { openUnlockModal(); }
+}
+
+function openUnlockModal() {
+  document.getElementById('unlockModal').classList.add('open');
+  document.getElementById('modal-bg-close').style.display = 'block';
+  document.getElementById('input-password').value = '';
+  document.getElementById('input-password').focus();
+}
+
+function closeUnlockModal() {
+  document.getElementById('unlockModal').classList.remove('open');
+  document.getElementById('modal-bg-close').style.display = 'none';
+}
+
+function tryUnlock() {
+  const pwd = document.getElementById('input-password').value.trim();
+  if (pwd === WRITER_PASSWORD) {
+    isUnlocked = true;
+    sessionStorage.setItem('journal_unlocked', '1');
+    document.getElementById('unlockBar').style.display = 'none';
+    document.getElementById('fab-btn').classList.add('unlocked');
+    closeUnlockModal();
+    showToast('已解锁，可以开始写作了 ✨');
+    openModal();
+  } else {
+    showToast('密码错误，请重试');
+    document.getElementById('input-password').value = '';
+  }
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('modal-bg-close').style.display = 'block';
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('input-title').value = '';
+  document.getElementById('input-content').value = '';
+}
+
+function selectType(btn) {
+  document.querySelectorAll('#type-selector .tag-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentType = btn.dataset.type;
+  document.getElementById('article-fields').style.display = currentType === 'life' ? '' : 'none';
+}
+
+function selectTag(btn) {
+  document.querySelectorAll('#tag-selector .tag-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentTag = btn.dataset.tag;
+}
+
+function selectMood(btn) {
+  document.querySelectorAll('#mood-selector .tag-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMood = btn.dataset.mood;
+}
+
+async function saveEntry() {
+  const content = document.getElementById('input-content').value.trim();
+  if (!content) { showToast('内容不能为空哦 ~'); return; }
+
+  if (currentType === 'thought') {
+    const row = { content, date: todayStr(), mood: currentMood };
+    const { error } = await supabase.from('thoughts').insert([row]);
+    if (error) { showToast('保存失败: ' + error.message); return; }
+    showToast('感悟已记录 ✨');
+  } else {
+    const title = document.getElementById('input-title').value.trim() || '无题记录';
+    const row = { title, content, tag: currentTag, date: todayStr(), mood: currentMood, likes: 0 };
+    const { error } = await supabase.from('articles').insert([row]);
+    if (error) { showToast('保存失败: ' + error.message); return; }
+    showToast('记录已保存 🌿');
+  }
+  closeModal();
+}
+
+// ── 工具 ──
+function tagLabel(tag) {
+  const m = { life: '🌱 生活', travel: '✈️ 旅行', food: '🍜 美食', book: '📚 读书', thought: '💡 感悟' };
+  return m[tag] || tag;
+}
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+function hideLoading() {
+  setTimeout(() => {
+    document.getElementById('loadingScreen').classList.add('hidden');
+    if (!isUnlocked && isConfigured) {
+      document.getElementById('unlockBar').style.display = 'flex';
+    } else if (isUnlocked) {
+      document.getElementById('fab-btn').classList.add('unlocked');
+    }
+  }, 600);
+}
+
+// ── 启动 ──
+init();
+</script>
+</body>
+</html>
