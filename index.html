@@ -537,19 +537,60 @@
 <div id="modal-bg-close" onclick="closeModal()" style="display:none;position:fixed;inset:0;z-index:299"></div>
 <div class="toast" id="toast"></div>
 
-<!-- Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
-
 <script>
 // ═══════════════════════════════════════
 // 配置区 — 请填入你的 Supabase 信息
 // ═══════════════════════════════════════
-const SUPABASE_URL = 'https://zsxqwzykbktnbkqqszhi.supabase.co';        // ← 替换
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeHF3enlrYmt0bmJrcXFzemhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNjM2MDksImV4cCI6MjA5NDgzOTYwOX0.k16lbF_30mQiTlG5Hja8KKEFh6aHSq8iUkQ88BIb1Ss'; // ← 替换
-const WRITER_PASSWORD = 'sesa181531';                   // ← 替换为你的写作密码
+const SUPABASE_URL = 'https://zsxqwzykbktnbkqqszhi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeHF3enlrYmt0bmJrcXFzemhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNjM2MDksImV4cCI6MjA5NDgzOTYwOX0.k16lbF_30mQiTlG5Hja8KKEFh6aHSq8iUkQ88BIb1Ss';
+const WRITER_PASSWORD = 'sesa181531';
 // ═══════════════════════════════════════
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ── Supabase REST API 封装（无需 SDK） ──
+const SB_HEADERS = {
+  'apikey': SUPABASE_ANON_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+};
+
+async function sbSelect(table, query) {
+  const url = SUPABASE_URL + '/rest/v1/' + table + (query ? '?' + query : '');
+  const res = await fetch(url, { headers: SB_HEADERS });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.msg || 'HTTP ' + res.status);
+  }
+  return await res.json();
+}
+
+async function sbInsert(table, data) {
+  const url = SUPABASE_URL + '/rest/v1/' + table;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.msg || 'HTTP ' + res.status);
+  }
+  return await res.json();
+}
+
+async function sbUpdate(table, data, query) {
+  const url = SUPABASE_URL + '/rest/v1/' + table + (query ? '?' + query : '');
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.msg || 'HTTP ' + res.status);
+  }
+  return await res.json();
+}
 
 // ── 状态 ──
 let isUnlocked = sessionStorage.getItem('journal_unlocked') === '1';
@@ -557,7 +598,7 @@ let isConfigured = SUPABASE_URL !== 'https://你的项目.supabase.co';
 let currentType = 'life';
 let currentTag = 'life';
 let currentMood = '😊';
-let realtimeChannel = null;
+let refreshTimer = null;
 
 // ── 启动 ──
 async function init() {
@@ -570,9 +611,9 @@ async function init() {
   try {
     await Promise.race([
       loadAllData(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时（10秒）')), 10000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时（10秒），请检查网络或 Supabase 是否可访问')), 10000))
     ]);
-    realtimeSubscribe();
+    startAutoRefresh();
   } catch (err) {
     console.error('初始化失败:', err);
     renderErrorState(err.message || '未知错误');
@@ -583,53 +624,40 @@ async function init() {
 
 // ── 加载数据 ──
 async function loadAllData() {
-  const [articlesRes, thoughtsRes] = await Promise.all([
-    supabase.from('articles').select('*').order('created_at', { ascending: false }),
-    supabase.from('thoughts').select('*').order('created_at', { ascending: false })
+  const [articles, thoughts] = await Promise.all([
+    sbSelect('articles', 'order=created_at.desc'),
+    sbSelect('thoughts', 'order=created_at.desc')
   ]);
-
-  if (articlesRes.error) throw new Error('加载文章失败: ' + articlesRes.error.message);
-  if (thoughtsRes.error) throw new Error('加载感悟失败: ' + thoughtsRes.error.message);
-
-  db.articles = articlesRes.data || [];
-  db.thoughts = thoughtsRes.data || [];
-
-  updateSyncDot();
+  db.articles = articles || [];
+  db.thoughts = thoughts || [];
   renderHome();
+}
+
+// ── 自动轮询刷新（替代 Realtime，国内更稳定） ──
+function startAutoRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(async () => {
+    try { await loadAllData(); } catch (e) { /* 静默失败 */ }
+  }, 30000);
 }
 
 // ── 错误状态 ──
 function renderErrorState(msg) {
   const errHtml = `
     <div style="text-align:center;padding:60px 20px;max-width:500px;margin:0 auto">
-      <div style="font-size:40px;margin-bottom:16px">⚠️</div>
+      <div style="font-size:40px;margin-bottom:16px">&#x26A0;&#xFE0F;</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text-main)">连接云端失败</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.7">${escHtml(msg)}</div>
       <div style="background:#FDF3EC;border-radius:12px;padding:16px;text-align:left;font-size:13px;color:#854F0B;line-height:1.8">
         <b>常见原因及解决方法：</b><br>
-        1. Supabase 数据表未建立 → 去 SQL Editor 运行建表语句<br>
-        2. RLS 策略未设置 → 运行部署指南里的 CREATE POLICY<br>
-        3. ANON KEY 填错 → 在 Supabase → Settings → API 重新复制<br>
-        4. 网络问题 → 刷新重试
+        1. Supabase 数据表未建立 &#x2192; 去 SQL Editor 运行建表语句<br>
+        2. RLS 策略未设置 &#x2192; 运行部署指南里的 CREATE POLICY<br>
+        3. ANON KEY 填错 &#x2192; 在 Supabase &#x2192; Settings &#x2192; API 重新复制<br>
+        4. 网络问题 &#x2192; 刷新重试，或检查 Supabase 项目是否暂停
       </div>
-      <button onclick="location.reload()" style="margin-top:20px;padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer">🔄 重新加载</button>
+      <button onclick="location.reload()" style="margin-top:20px;padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer">&#x1F504; 重新加载</button>
     </div>`;
   document.getElementById('page-home').innerHTML = errHtml;
-}
-
-// ── 实时订阅 ──
-function realtimeSubscribe() {
-  if (!isConfigured) return;
-  realtimeChannel = supabase
-    .channel('journal-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'articles' }, () => { loadAllData(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'thoughts' }, () => { loadAllData(); })
-    .subscribe();
-}
-
-function updateSyncDot() {
-  document.querySelectorAll('.sync-dot').forEach(d => d.classList.add('syncing'));
-  setTimeout(() => document.querySelectorAll('.sync-dot').forEach(d => d.classList.remove('syncing')), 1000);
 }
 
 // ── 本地数据结构（兼容旧代码） ──
@@ -763,13 +791,13 @@ async function toggleLike(e, id) {
   const a = db.articles.find(x => x.id === id);
   if (!a) return;
   const newLikes = (a.likes || 0) + (a.liked ? -1 : 1);
-  const { error } = await supabase.from('articles').update({ likes: newLikes, liked: !a.liked }).eq('id', id);
-  if (!error) {
+  try {
+    await sbUpdate('articles', { likes: newLikes, liked: !a.liked }, 'id=eq.' + id);
     a.likes = newLikes; a.liked = !a.liked;
     e.currentTarget.classList.toggle('liked', a.liked);
     e.currentTarget.innerHTML = `♥ ${a.likes}`;
-  } else {
-    showToast('点赞失败，请检查网络');
+  } catch (err) {
+    showToast('点赞失败');
   }
 }
 
@@ -843,19 +871,20 @@ async function saveEntry() {
   const content = document.getElementById('input-content').value.trim();
   if (!content) { showToast('内容不能为空哦 ~'); return; }
 
-  if (currentType === 'thought') {
-    const row = { content, date: todayStr(), mood: currentMood };
-    const { error } = await supabase.from('thoughts').insert([row]);
-    if (error) { showToast('保存失败: ' + error.message); return; }
-    showToast('感悟已记录 ✨');
-  } else {
-    const title = document.getElementById('input-title').value.trim() || '无题记录';
-    const row = { title, content, tag: currentTag, date: todayStr(), mood: currentMood, likes: 0 };
-    const { error } = await supabase.from('articles').insert([row]);
-    if (error) { showToast('保存失败: ' + error.message); return; }
-    showToast('记录已保存 🌿');
+  try {
+    if (currentType === 'thought') {
+      await sbInsert('thoughts', { content, date: todayStr(), mood: currentMood });
+      showToast('感悟已记录 ✨');
+    } else {
+      const title = document.getElementById('input-title').value.trim() || '无题记录';
+      await sbInsert('articles', { title, content, tag: currentTag, date: todayStr(), mood: currentMood, likes: 0 });
+      showToast('记录已保存 🌿');
+    }
+    await loadAllData();
+    closeModal();
+  } catch (err) {
+    showToast('保存失败: ' + err.message);
   }
-  closeModal();
 }
 
 // ── 工具 ──
