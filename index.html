@@ -851,8 +851,16 @@ async function deleteEntry(e, table, id) {
   if (!confirm('确定要删除这条记录吗？此操作不可撤销。')) return;
   try {
     await sbDelete(table, 'id=eq.' + id);
-    showToast('已删除');
-    await loadAllData();
+    // 从本地数据移除，立即刷新当前所有视图
+    if (table === 'articles') {
+      db.articles = db.articles.filter(x => x.id !== id);
+    } else {
+      db.thoughts = db.thoughts.filter(x => x.id !== id);
+    }
+    renderHome();
+    renderLifeList();
+    renderAllThoughts();
+    showToast('已删除 🗑️');
   } catch (err) {
     showToast('删除失败: ' + err.message);
   }
