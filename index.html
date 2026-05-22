@@ -159,6 +159,12 @@
       background: transparent; transition: all 0.2s;
     }
     .card-like:hover, .card-like.liked { background: #FCEBEB; border-color: #F09595; color: #A32D2D; }
+    .card-delete, .thought-delete {
+      font-size: 13px; color: var(--text-hint);
+      background: none; border: none; cursor: pointer;
+      padding: 3px 6px; border-radius: 8px; transition: all 0.2s; line-height: 1;
+    }
+    .card-delete:hover, .thought-delete:hover { color: #E24B4A; background: #FCEBEB; }
 
     /* 感悟列表 */
     .thought-list { display: flex; flex-direction: column; gap: 16px; }
@@ -592,6 +598,19 @@ async function sbUpdate(table, data, query) {
   return await res.json();
 }
 
+async function sbDelete(table, query) {
+  const url = SUPABASE_URL + '/rest/v1/' + table + (query ? '?' + query : '');
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: SB_HEADERS
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.msg || 'HTTP ' + res.status);
+  }
+  return true;
+}
+
 // ── 状态 ──
 let isUnlocked = sessionStorage.getItem('journal_unlocked') === '1';
 let isConfigured = SUPABASE_URL !== 'https://你的项目.supabase.co';
@@ -599,6 +618,14 @@ let currentType = 'life';
 let currentTag = 'life';
 let currentMood = '😊';
 let refreshTimer = null;
+
+// ── 点赞状态（localStorage，每个访客独立） ──
+function getMyLikes() {
+  try { return JSON.parse(localStorage.getItem('my_likes') || '[]'); } catch { return []; }
+}
+function setMyLikes(arr) {
+  localStorage.setItem('my_likes', JSON.stringify(arr));
+}
 
 // ── 启动 ──
 async function init() {
@@ -709,6 +736,7 @@ function renderArticleGrid(container, articles) {
     container.innerHTML = '<div class="empty">还没有记录 ✨</div>';
     return;
   }
+  const myLikes = getMyLikes();
   container.innerHTML = articles.map(a => `
     <div class="card" onclick="openArticle('${a.id}')">
       <span class="card-tag tag-${a.tag || 'life'}">${tagLabel(a.tag || 'life')}</span>
@@ -716,9 +744,12 @@ function renderArticleGrid(container, articles) {
       <div class="card-excerpt">${escHtml(a.content || '')}</div>
       <div class="card-meta">
         <span class="card-date">${a.mood || '😊'} ${a.date || ''}</span>
-        <button class="card-like ${a.liked ? 'liked' : ''}" onclick="toggleLike(event,'${a.id}')">
-          ♥ ${a.likes || 0}
-        </button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="card-like ${myLikes.includes(a.id) ? 'liked' : ''}" onclick="toggleLike(event,'${a.id}')">
+            ♥ ${a.likes || 0}
+          </button>
+          ${isUnlocked ? `<button class="card-delete" onclick="deleteEntry(event,'articles','${a.id}')" title="删除">🗑️</button>` : ''}
+        </div>
       </div>
     </div>
   `).join('');
@@ -732,7 +763,10 @@ function renderThoughtList(container, thoughts) {
   container.innerHTML = thoughts.map(t => `
     <div class="thought-card">
       <blockquote>"${escHtml(t.content || '')}"</blockquote>
-      <div class="meta"><span>${t.mood || '🤔'}</span><span>${t.date || ''}</span></div>
+      <div class="meta">
+        <span>${t.mood || '🤔'}</span><span>${t.date || ''}</span>
+        ${isUnlocked ? `<button class="thought-delete" onclick="deleteEntry(event,'thoughts','${t.id}')" title="删除">🗑️</button>` : ''}
+      </div>
     </div>
   `).join('');
 }
@@ -788,16 +822,39 @@ function renderAbout() {
 // ── 点赞 ──
 async function toggleLike(e, id) {
   e.stopPropagation();
+  e.preventDefault();
+  const btn = e.currentTarget; // 在 await 前保存引用
   const a = db.articles.find(x => x.id === id);
   if (!a) return;
-  const newLikes = (a.likes || 0) + (a.liked ? -1 : 1);
+  const myLikes = getMyLikes();
+  const hasLiked = myLikes.includes(id);
+  const newLikes = Math.max((a.likes || 0) + (hasLiked ? -1 : 1), 0);
   try {
-    await sbUpdate('articles', { likes: newLikes, liked: !a.liked }, 'id=eq.' + id);
-    a.likes = newLikes; a.liked = !a.liked;
-    e.currentTarget.classList.toggle('liked', a.liked);
-    e.currentTarget.innerHTML = `♥ ${a.likes}`;
+    await sbUpdate('articles', { likes: newLikes }, 'id=eq.' + id);
+    a.likes = newLikes;
+    if (hasLiked) {
+      setMyLikes(myLikes.filter(x => x !== id));
+      btn.classList.remove('liked');
+    } else {
+      setMyLikes([...myLikes, id]);
+      btn.classList.add('liked');
+    }
+    btn.innerHTML = '♥ ' + a.likes;
   } catch (err) {
     showToast('点赞失败');
+  }
+}
+
+// ── 删除 ──
+async function deleteEntry(e, table, id) {
+  e.stopPropagation();
+  if (!confirm('确定要删除这条记录吗？此操作不可撤销。')) return;
+  try {
+    await sbDelete(table, 'id=eq.' + id);
+    showToast('已删除');
+    await loadAllData();
+  } catch (err) {
+    showToast('删除失败: ' + err.message);
   }
 }
 
@@ -844,6 +901,7 @@ function openModal() {
 
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
+  document.getElementById('modal-bg-close').style.display = 'none';
   document.getElementById('input-title').value = '';
   document.getElementById('input-content').value = '';
 }
